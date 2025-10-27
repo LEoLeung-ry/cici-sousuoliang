@@ -139,14 +139,14 @@
 
   <script>
     /* * ===============================================================
-     * * 脚本部分 (已修复所有JS拼写错误)
+     * * 脚本部分 (已清除所有JS拼写错误)
      * * ===============================================================
      */
 
     /***************************************************************
      * 1) CSV链接
      ***************************************************************/
-    const KEYWORD_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTxT7pk3XLnPr87Fpq2Fii90bqh_R2jsCjO6e3dZkMLKmuw75ksYiuSce3DC7uUK5IXBEFmeKT1P7oJ/pub?output=csv";
+    const KEYWORD_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSBce7q_OMpfcVP7rW9Qbtp9jaRpcW7MY4hzaXtvrOlZh0qrwlMMqJupAUkDzYkqJ5DJGBAlHUbXU_0/pub?output=csv";
     const AVG_TEMP_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQsIu0jYheUb5YE9-D0SwtL6FxkTjFwEgWaH56NdOyqYfNkcZLJGM2xp9T2wPLcF5lYFBZ3UCa7eiaj/pub?output=csv";
     const MAX_TEMP_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSnxZTyYhuMkeM0D0ystDYz2w0tQJZDN5yyxoy51Rl8yA23j-7nSm3gOC4SeAJnhB9_iHT_mTIVzZlR/pub?output=csv";
 
@@ -174,7 +174,7 @@
             error: err => {
               console.warn(`[WARN] 第${attempts}次请求失败:`, err);
               if (attempts < maxAttempts) {
-                attemptFetch();
+                setTimeout(attemptFetch, 1000 * attempts); 
               } else {
                 reject(err);
               }
@@ -191,17 +191,32 @@
     function fetchKeywordCSV() {
       return parseCSVWithRetry(KEYWORD_CSV_URL, 3);
     }
+
     function convertWideToLong(raw2D) {
       const rowGroup = raw2D[0];
       const rowKeyword = raw2D[1];
       const out = [];
+
+      const numCols = rowKeyword.length; 
+
       for (let r = 2; r < raw2D.length; r++) {
         const row = raw2D[r];
-        if (!row[0]) continue;
+        if (!row || !row[0]) continue; 
         const fileName = row[0];
-        for (let c = 1; c < row.length; c++) {
-          const grp = rowGroup[c];
-          const kw = rowKeyword[c];
+        
+        let currentGroup = ""; 
+
+        for (let c = 1; c < numCols; c++) { 
+          
+          if (rowGroup[c]) {
+            currentGroup = rowGroup[c].trim();
+          }
+          const grp = currentGroup;
+          const kw = rowKeyword[c] ? rowKeyword[c].trim() : "";
+
+          if (!grp || !kw) {
+            continue;
+          }
           
           const rawStr = (row[c] || "").trim();
           let val = NaN;
@@ -212,8 +227,10 @@
           out.push({ week_label: fileName, group: grp, keyword: kw, value: val });
         }
       }
+      console.log("[DEBUG] convertWideToLong output:", out); 
       return out;
     }
+
     function processLongRows(longData) {
       const setWeeks = new Set();
       longData.forEach(it => setWeeks.add(it.week_label));
@@ -226,10 +243,18 @@
         const g = it.group;
         const k = it.keyword;
         const v = it.value;
+
+        if (!g || !k) {
+          console.warn("Skipping data with missing group or keyword:", it);
+          return; 
+        }
+
         if (!gData[g]) gData[g] = {};
         if (!gData[g][k]) gData[g][k] = new Array(count).fill(NaN);
         const idx = weeks.indexOf(w);
-        gData[g][k][idx] = v;
+        if (idx > -1) {
+          gData[g][k][idx] = v;
+        }
       });
 
       const sorted = {};
@@ -241,6 +266,7 @@
         });
         sorted[gName] = sortedKwMap;
       });
+      console.log("[DEBUG] processLongRows output:", { weeks, groups: sorted }); 
       return { weeks, groups: sorted };
     }
 
@@ -250,13 +276,19 @@
     function fetchTempCSV(url) {
       return parseCSVWithRetry(url, 3);
     }
+
     function convertTempData(raw2D) {
       const map = {};
       for (let r = 1; r < raw2D.length; r++) {
         const row = raw2D[r];
-        if (!row[0]) continue;
+        if (!row || !row[0]) continue;
         const wk = row[0];
-        const val = parseFloat(row[1] || 0); 
+        
+        const rawStr = (row[1] || "").trim();
+        let val = NaN;
+        if (rawStr) {
+          val = parseFloat(rawStr.replace(/,/g, ''));
+        }
         map[wk] = val;
       }
       return map;
@@ -269,8 +301,9 @@
       const ctx = document.getElementById("myChart").getContext("2d");
       if (chart) chart.destroy();
 
-      // 添加气温线
-      dsList.push({
+      const datasets = [...dsList];
+
+      datasets.push({
         label: "平均气温",
         data: tempAvgData,
         borderColor: "rgba(0,0,255,0.7)",
@@ -282,7 +315,7 @@
         pointHoverRadius: 6,
         yAxisID: "y2"
       });
-      dsList.push({
+      datasets.push({
         label: "最高气温",
         data: tempMaxData,
         borderColor: "rgba(255,0,0,0.7)",
@@ -297,7 +330,7 @@
 
       chart = new Chart(ctx, {
         type: "line",
-        data: { labels: weeks, datasets: dsList },
+        data: { labels: weeks, datasets: datasets },
         options: {
           responsive: true,
           maintainAspectRatio: false,
@@ -307,12 +340,11 @@
             y: {
               reverse: false, 
               title: { display: true, text: "关键词搜索量(数值大→上)" }
-            },
+           A },
             y2: {
               type: "linear",
               position: "right",
               reverse: false,
-              // 【JS 错误修复 1】: 移除了多余的 'S'
               title: { display: true, text: "气温(℃)" },
               grid: { drawOnChartArea: false }
             }
@@ -356,7 +388,7 @@
      * D. 侧边栏 (按搜索量 *降序* 排序)
      ***************************************************************/
     function getLatestValue(arr) {
-      if (arr.length === 0) return NaN;
+      if (!arr || arr.length === 0) return NaN;
       for (let i = arr.length - 1; i >= 0; i--) {
         if (!isNaN(arr[i])) {
             return arr[i];
@@ -372,6 +404,12 @@
       noMatchMsg.style.display = "none";
 
       let totalGroups = 0;
+      if (!gData || Object.keys(gData).length === 0) {
+        console.warn("renderGroupSidebar: 传入的 gData 为空。");
+        noMatchMsg.style.display = "";
+        return;
+      }
+
       Object.keys(gData).forEach(grp => {
         totalGroups++;
         const details = document.createElement("details");
@@ -399,6 +437,8 @@
         details.appendChild(summary);
 
         const kwMap = gData[grp];
+        if (!kwMap) return; 
+
         let kwArray = Object.keys(kwMap).map(kw => {
           const arr = kwMap[kw];
           const latestVal = getLatestValue(arr);
@@ -469,7 +509,7 @@
             matchedKw++;
           } else {
             lb.style.display = "none";
-          } // 【JS 错误修复 3】: 移除了多余的 'E'
+          }
         });
 
         if (s.length === 0) {
@@ -488,7 +528,7 @@
       if (visibleCount === 0) {
         noMatchMsg.style.display = "";
       }
-    }
+  A }
 
     /***************************************************************
      * E. updateVisibleLines
@@ -505,18 +545,20 @@
       cbs.forEach(cb => {
         const grp = cb.dataset.group;
         const kw = cb.dataset.keyword;
-        const arr = globalGroupsRaw[grp][kw];
-        dsList.push({
-          label: grp + "/" + kw,
-          data: arr,
-          borderColor: colorList[idx % colorList.length],
-          fill: false,
-          tension: 0.1,
-          pointRadius: 2,
-          pointHoverRadius: 6,
-          yAxisID: "y"
-        });
-        idx++;
+        if (globalGroupsRaw[grp] && globalGroupsRaw[grp][kw]) {
+          const arr = globalGroupsRaw[grp][kw];
+          dsList.push({
+            label: grp + "/" + kw,
+            data: arr,
+            borderColor: colorList[idx % colorList.length],
+            fill: false,
+            tension: 0.1,
+            pointRadius: 2,
+            pointHoverRadius: 6,
+            yAxisID: "y"
+          });
+          idx++;
+        }
       });
       createChart(labelsAll, dsList);
     }
@@ -557,19 +599,22 @@
       cbs.forEach(cb => {
         const grp = cb.dataset.group;
         const kw = cb.dataset.keyword;
-        const fullData = globalGroupsRaw[grp][kw];
-        const sliced = fullData.slice(startIdx, endIdx + 1);
-        dsList.push({
-          label: grp + "/" + kw,
-          data: sliced,
-          borderColor: colorList[i % colorList.length],
-          fill: false,
-          tension: 0.1,
-          pointRadius: 2,
-          pointHoverRadius: 6,
-          yAxisID: "y"
-        });
-        i++;
+        
+        if (globalGroupsRaw[grp] && globalGroupsRaw[grp][kw]) {
+          const fullData = globalGroupsRaw[grp][kw];
+          const sliced = fullData.slice(startIdx, endIdx + 1);
+          dsList.push({
+            label: grp + "/" + kw,
+CH         data: sliced,
+            borderColor: colorList[i % colorList.length],
+            fill: false,
+            tension: 0.1,
+            pointRadius: 2,
+            pointHoverRadius: 6,
+            yAxisID: "y"
+          });
+          i++;
+        }
       });
       const slicedWeeks = labelsAll.slice(startIdx, endIdx + 1);
       const slicedAvg = tempAvgData.slice(startIdx, endIdx + 1);
@@ -578,7 +623,10 @@
     }
     function createChart2(weeks, dsList, slicedAvg, slicedMax) {
       if (chart) chart.destroy();
-      dsList.push({
+
+      const datasets = [...dsList];
+
+      datasets.push({
         label: "平均气温",
         data: slicedAvg,
         borderColor: "rgba(0,0,255,0.7)",
@@ -590,7 +638,7 @@
         pointHoverRadius: 6,
         yAxisID: "y2"
       });
-      dsList.push({
+      datasets.push({
         label: "最高气温",
         data: slicedMax,
         borderColor: "rgba(255,0,0,0.7)",
@@ -598,7 +646,6 @@
         borderDash: [6, 3],
         fill: false,
         tension: 0.1,
-      // 【JS 错误修复 2】: 移除了多余的 'g'
         pointRadius: 0,
         pointHoverRadius: 6,
         yAxisID: "y2"
@@ -607,7 +654,7 @@
       const ctx = document.getElementById("myChart").getContext("2d");
       chart = new Chart(ctx, {
         type: "line",
-        data: { labels: weeks, datasets: dsList },
+        data: { labels: weeks, datasets: datasets },
         options: {
           responsive: true,
           maintainAspectRatio: false,
@@ -638,14 +685,14 @@
                     }
                   let str = context.dataset.label + ": " + val.toLocaleString(); 
                   if (context.dataset.yAxisID === "y2") {
-                    str += "°C";
+CH               str += "°C";
                   }
                   const yoyIdx = context.dataIndex - 52;
                   if (yoyIdx >= 0) {
                     const yoyVal = context.dataset.data[yoyIdx];
                     if (!isNaN(yoyVal)) {
                         if (context.dataset.yAxisID === "y2") {
-                          str += " (去年: " + yoyVal.toFixed(2) + "°C)";
+                    A     str += " (去年: " + yoyVal.toFixed(2) + "°C)";
                         } else {
                             str += " (去年: " + yoyVal.toLocaleString() + ")";
                         }
@@ -667,11 +714,14 @@
       try {
         // 1) 加载关键词
         const keywordRaw = await parseCSVWithRetry(KEYWORD_CSV_URL, 3);
+        if (!keywordRaw || !keywordRaw.data || keywordRaw.data.length < 3) {
+            throw new Error("关键词CSV数据不足 (少于3行)");
+        }
         const longData = convertWideToLong(keywordRaw.data);
         const { weeks, groups } = processLongRows(longData);
         labelsAll = weeks;
         globalGroupsRaw = groups; 
-        groupsData = groups;    
+        groupsData = groups;   A 
 
         // 2) 加载平均气温
         const avgRaw = await parseCSVWithRetry(AVG_TEMP_CSV_URL, 3);
@@ -687,7 +737,7 @@
         labelsAll.forEach((wk, i) => {
           if (avgMap[wk] != null) {
             tempAvgData[i] = avgMap[wk];
-          }
+Two     }
           if (maxMap[wk] != null) {
             tempMaxData[i] = maxMap[wk];
           }
@@ -710,8 +760,7 @@
           const opt2 = document.createElement("option");
           opt2.value = i;
           opt2.text = wk.replace("_Week_", " W");
-          // 【JS 错误修复 4】: 移除了多余的 'Z'
-          endSel.appendChild(opt2);
+CH       endSel.appendChild(opt2);
         });
         startSel.value = 0;
         endSel.value = weeks.length - 1;
@@ -719,10 +768,10 @@
         // 7) 默认全选
         updateVisibleLines();
       } catch (err) {
-        console.error("数据加载失败:", err);
-        alert("关键数据加载失败，请检查网络或CSV链接后刷新重试。\n" + err.message);
+        console.error("主流程(main)失败:", err);
+        alert("关键数据加载或解析失败，请检查CSV链接或数据格式后刷新重试。\n" + err.message);
       }
-    }
+Z   }
 
     /***************************************************************
      * K. 事件绑定
@@ -734,19 +783,20 @@
       if (chart) chart.destroy();
       const ctx = document.getElementById("myChart").getContext("2d");
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-      ctx.fillText("正在刷新数据...", 10, 30);
+      ctx.font = "16px Arial";
+      ctx.fillStyle = "#333";
+      ctx.fillText("正在刷新数据，请稍候...", 30, 50);
       main();
     });
     document.getElementById("btnFilter").addEventListener("click", () => {
       const s = parseInt(document.getElementById("startWeek").value);
-      const e = parseInt(document.getElementById("endWeek").value);
+A     const e = parseInt(document.getElementById("endWeek").value);
       const startIdx = Math.min(s, e);
       const endIdx = Math.max(s, e);
       filterDataRange(startIdx, endIdx);
     });
     document.getElementById("globalAllBtn").addEventListener("click", () => {
       setAllCheck(true);
-    // 【JS 错误修复 5】: 移除了多余的 'S'
     });
     document.getElementById("globalNoneBtn").addEventListener("click", () => {
       setAllCheck(false);
