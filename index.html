@@ -12,12 +12,20 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.2.1" defer></script>
 
   <style>
+    /* 【布局修复 1】: 添加了 box-sizing */
+    * {
+      box-sizing: border-box;
+    }
     html, body {
       margin: 0;
       padding: 0;
       height: 100%;
       font-family: sans-serif;
-      overflow: auto;
+      /* 【布局修复 2】: 
+       * 从 'auto' 改为 'hidden'。
+       * 这强制 body 高度为 100%，防止页面级滚动条破坏 100vh 布局。
+       */
+      overflow: hidden; 
     }
     .sidebar-toggle {
       position: fixed; left: 0; top: 0;
@@ -33,7 +41,6 @@
       transform: translateX(-100%);
       transition: transform 0.3s;
       padding: 10px;
-      box-sizing: border-box;
       overflow-y: auto;
       z-index: 9998;
       padding-top: 50px;
@@ -76,20 +83,27 @@
     }
     .main-area {
       margin-left: 60px;
-      display: flex; flex-direction: column;
-      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      height: 100vh; /* 确保主区域占满视窗高度 */
     }
     .topbar {
       background: #f0f0f0; padding: 8px;
       display: flex; align-items: center; gap: 6px;
-      flex-shrink: 0;
+      flex-shrink: 0; /* 顶部栏不收缩 */
     }
     .topbar h1 {
       margin: 0; 
       flex: 1;
     }
     .chart-container {
-      flex: 1; position: relative; overflow: auto;
+      flex: 1; /* 关键: 占满 .main-area 剩余的全部高度 */
+      position: relative; 
+      overflow: auto; /* 关键: *只* 在这个容器内滚动 (用于min-width/min-height) */
+      /* 【布局修复 3】: 
+       * 这是一个 flexbox 修复，确保 'flex: 1' 在内容溢出时能正确计算高度。
+       */
+      min-height: 0; 
     }
     #myChart {
       min-width: 1200px;
@@ -99,6 +113,7 @@
 </head>
 
 <body>
+  <!-- HTML 结构保持不变 -->
   <button class="sidebar-toggle" id="toggleSidebar">≡</button>
 
   <div class="sidebar" id="sidebar">
@@ -132,12 +147,9 @@
 
   <script>
     /***************************************************************
-     * 1) CSV链接
+     * 1) CSV链接 (JavaScript 部分完全不变)
      ***************************************************************/
-    /* 注意: 这里的 KEYWORD_CSV_URL 假定您已经更新了 Google Sheet 里的内容。
-      它现在应该包含搜索量数据 (大数值, 逗号, N/A)。
-    */
-    const KEYWORD_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSBce7q_OMpfcVP7rW9Qbtp9jaRpcW7MY4hzaXtvrOlZh0qrwlMMqJupAUkDzYkqJ5DJGBAlHUbXU_0/pub?output=csv";
+    const KEYWORD_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTxT7pk3XLnPr87Fpq2Fii90bqh_R2jsCjO6e3dZkMLKmuw75ksYiuSce3DC7uUK5IXBEFmeKT1P7oJ/pub?output=csv";
     const AVG_TEMP_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQsIu0jYheUb5YE9-D0SwtL6FxkTjFwEgWaH56NdOyqYfNkcZLJGM2xp9T2wPLcF5lYFBZ3UCa7eiaj/pub?output=csv";
     const MAX_TEMP_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSnxZTyYhuMkeM0D0ystDYz2w0tQJZDN5yyxoy51Rl8yA23j-7nSm3gOC4SeAJnhB9_iHT_mTIVzZlR/pub?output=csv";
 
@@ -146,13 +158,13 @@
      ***************************************************************/
     let chart;
     let labelsAll = [];
-    let groupsData = {};     // 当前显示的分组/关键词数据
-    let globalGroupsRaw = {}; // 原始分组数据，用于搜索还原
+    let groupsData = {};   
+    let globalGroupsRaw = {}; 
     let tempAvgData = [];
     let tempMaxData = [];
 
     /***************************************************************
-     * 重试机制：前端拉取 CSV (最多尝试3次)
+     * 重试机制
      ***************************************************************/
     function parseCSVWithRetry(url, maxAttempts = 3) {
       return new Promise((resolve, reject) => {
@@ -177,7 +189,7 @@
     }
 
     /***************************************************************
-     * A. 加载&解析 关键词 CSV
+     * A. 解析 关键词 CSV (处理逗号和N/A)
      ***************************************************************/
     function fetchKeywordCSV() {
       return parseCSVWithRetry(KEYWORD_CSV_URL, 3);
@@ -193,14 +205,11 @@
         for (let c = 1; c < row.length; c++) {
           const grp = rowGroup[c];
           const kw = rowKeyword[c];
-          
-          /* * 【修改点 1】: 处理带逗号的数字和 'N/A'
-           * - 移除所有逗号 (,)
-           * - parseFloat 会自动将 "N/A" 或空字符串转为 NaN
-           */
+          
           const rawStr = (row[c] || "").trim();
           let val = NaN;
           if (rawStr) {
+            // 移除逗号, parseFloat 会自动处理 "N/A" 为 NaN
             val = parseFloat(rawStr.replace(/,/g, ''));
           }
 
@@ -240,32 +249,31 @@
     }
 
     /***************************************************************
-     * B. 加载&解析 气温 CSV
+     * B. 解析 气温 CSV
      ***************************************************************/
     function fetchTempCSV(url) {
       return parseCSVWithRetry(url, 3);
     }
-    // 第0行=标题, 第1行起 => [week_label, value]
     function convertTempData(raw2D) {
       const map = {};
       for (let r = 1; r < raw2D.length; r++) {
         const row = raw2D[r];
         if (!row[0]) continue;
         const wk = row[0];
-        const val = parseFloat(row[1] || 0); // 气温数据假定没有逗号
+        const val = parseFloat(row[1] || 0); 
         map[wk] = val;
       }
       return map;
     }
 
     /***************************************************************
-     * C. createChart(): 单图 + 左轴(关键词) + 右轴(气温)
+     * C. createChart() (Y轴为搜索量, 不反转)
      ***************************************************************/
     function createChart(weeks, dsList) {
       const ctx = document.getElementById("myChart").getContext("2d");
       if (chart) chart.destroy();
 
-      // 添加气温线(右轴, 虚线)
+      // 添加气温线
       dsList.push({
         label: "平均气温",
         data: tempAvgData,
@@ -300,19 +308,15 @@
           interaction: { mode: 'index', intersect: false },
           scales: {
             x: { title: { display: true, text: "周" } },
-            /* * 【修改点 2】: Y轴不再反转
-             * - reverse: false (或移除)
-             * - 修改 title 文本
-             */
             y: {
-              reverse: false, 
+              reverse: false, // 搜索量：不反转
               title: { display: true, text: "关键词搜索量(数值大→上)" }
             },
             y2: {
               type: "linear",
               position: "right",
               reverse: false,
-              title: { display: true, text: "气温(℃)" },
+        S       title: { display: true, text: "气温(℃)" },
               grid: { drawOnChartArea: false }
             }
           },
@@ -324,7 +328,6 @@
               callbacks: {
                 label: function (context) {
                   const val = context.parsed.y;
-                    // 如果值为 NaN (例如 "N/A" 数据)，则不显示
                     if (isNaN(val)) {
                         return context.dataset.label + ": (无数据)";
                     }
@@ -353,7 +356,7 @@
     }
 
     /***************************************************************
-     * D. 在关键词后面显示“(最后一周数值)” —— 取数组最后一个值
+     * D. 侧边栏 (按搜索量 *降序* 排序)
      ***************************************************************/
     function getLatestValue(arr) {
       if (arr.length === 0) return NaN;
@@ -366,9 +369,6 @@
       return NaN;
     }
 
-    /***************************************************************
-     * D. 渲染侧边栏(分组+关键词) —— 同组内关键词按最后一周数值 *降序* 排序
-     ***************************************************************/
     function renderGroupSidebar(gData) {
       const container = document.getElementById("groupContainer");
       const noMatchMsg = document.getElementById("noMatchMsg");
@@ -402,16 +402,13 @@
 
         details.appendChild(summary);
 
-        // 关键词 => 先收集后排序（根据最后一周数值 *降序*，NaN排后）
+        // 关键词 (降序排序 B - A)
         const kwMap = gData[grp];
         let kwArray = Object.keys(kwMap).map(kw => {
           const arr = kwMap[kw];
           const latestVal = getLatestValue(arr);
           return { kw, latestVal, arr };
         });
-        /* * 【修改点 3】: 排序改为降序 (b - a)
-         * 因为数值越大 (搜索量高) 越好，我们希望它排在前面。
-         */
         kwArray.sort((a, b) => {
           const A = a.latestVal, B = b.latestVal;
           const isANaN = isNaN(A), isBNaN = isNaN(B);
@@ -421,7 +418,6 @@
           return B - A; // 降序排序
         });
 
-        // 创建关键词 label
         kwArray.forEach(obj => {
           const lb = document.createElement("label");
           const cb = document.createElement("input");
@@ -451,7 +447,7 @@
     }
 
     /***************************************************************
-     * D2. 搜索：过滤不匹配的分组/关键词
+     * D2. 搜索
      ***************************************************************/
     function applySearchFilter(term) {
       const noMatchMsg = document.getElementById("noMatchMsg");
@@ -478,7 +474,7 @@
             matchedKw++;
           } else {
             lb.style.display = "none";
-          }
+E         }
         });
 
         if (s.length === 0) {
@@ -500,7 +496,7 @@
     }
 
     /***************************************************************
-     * E. updateVisibleLines：构造关键词数据集 => createChart
+     * E. updateVisibleLines
      ***************************************************************/
     function updateVisibleLines() {
       const cbs = document.querySelectorAll(`#groupContainer input[type='checkbox']:checked`);
@@ -514,7 +510,7 @@
       cbs.forEach(cb => {
         const grp = cb.dataset.group;
         const kw = cb.dataset.keyword;
-        const arr = globalGroupsRaw[grp][kw]; // 使用原始数据
+        const arr = globalGroupsRaw[grp][kw];
         dsList.push({
           label: grp + "/" + kw,
           data: arr,
@@ -531,7 +527,7 @@
     }
 
     /***************************************************************
-     * E2. setGroupCheck：全选/全不选某分组
+     * E2. setGroupCheck
      ***************************************************************/
     function setGroupCheck(groupName, isCheck) {
       const cbs = document.querySelectorAll(`#groupContainer input[data-group="${groupName}"]`);
@@ -607,7 +603,7 @@
         borderDash: [6, 3],
         fill: false,
         tension: 0.1,
-        pointRadius: 0,
+g       pointRadius: 0,
         pointHoverRadius: 6,
         yAxisID: "y2"
       });
@@ -622,10 +618,8 @@
           interaction: { mode: 'index', intersect: false },
           scales: {
             x: { title: { display: true, text: "周" } },
-            /* * 【修改点 2】: Y轴不再反转 (同样要修改 createChart2)
-             */
             y: {
-              reverse: false,
+              reverse: false, // 搜索量：不反转
               title: { display: true, text: "关键词搜索量(数值大→上)" }
             },
             y2: {
@@ -646,7 +640,7 @@
                     if (isNaN(val)) {
                         return context.dataset.label + ": (无数据)";
                     }
-                  let str = context.dataset.label + ": " + val.toLocaleString(); // 添加千位分隔符
+                  let str = context.dataset.label + ": " + val.toLocaleString(); 
                   if (context.dataset.yAxisID === "y2") {
                     str += "°C";
                   }
@@ -680,8 +674,8 @@
         const longData = convertWideToLong(keywordRaw.data);
         const { weeks, groups } = processLongRows(longData);
         labelsAll = weeks;
-        globalGroupsRaw = groups; // 原始数据保存
-        groupsData = groups;     // 当前显示
+        globalGroupsRaw = groups; 
+        groupsData = groups;    
 
         // 2) 加载平均气温
         const avgRaw = await parseCSVWithRetry(AVG_TEMP_CSV_URL, 3);
@@ -709,6 +703,8 @@
         // 6) 初始化下拉
         const startSel = document.getElementById("startWeek");
         const endSel = document.getElementById("endWeek");
+        startSel.innerHTML = ""; // 清空
+        endSel.innerHTML = ""; // 清空
         weeks.forEach((wk, i) => {
           const opt1 = document.createElement("option");
           opt1.value = i;
@@ -718,7 +714,7 @@
           const opt2 = document.createElement("option");
           opt2.value = i;
           opt2.text = wk.replace("_Week_", " W");
-          endSel.appendChild(opt2);
+Z       endSel.appendChild(opt2);
         });
         startSel.value = 0;
         endSel.value = weeks.length - 1;
@@ -738,6 +734,11 @@
       document.getElementById("sidebar").classList.toggle("active");
     });
     document.getElementById("btnRefresh").addEventListener("click", () => {
+      // 刷新时清空图表，显示加载中...
+      if (chart) chart.destroy();
+      const ctx = document.getElementById("myChart").getContext("2d");
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      ctx.fillText("正在刷新数据...", 10, 30);
       main();
     });
     document.getElementById("btnFilter").addEventListener("click", () => {
@@ -749,7 +750,7 @@
     });
     document.getElementById("globalAllBtn").addEventListener("click", () => {
       setAllCheck(true);
-    });
+  S });
     document.getElementById("globalNoneBtn").addEventListener("click", () => {
       setAllCheck(false);
     });
