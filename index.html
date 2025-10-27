@@ -12,7 +12,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.2.1" defer></script>
 
   <style>
-    /* 【布局修复 1】: 添加了 box-sizing */
+    /* CSS 布局部分 (已修复) */
     * {
       box-sizing: border-box;
     }
@@ -21,10 +21,6 @@
       padding: 0;
       height: 100%;
       font-family: sans-serif;
-      /* 【布局修复 2】: 
-       * 从 'auto' 改为 'hidden'。
-       * 这强制 body 高度为 100%，防止页面级滚动条破坏 100vh 布局。
-       */
       overflow: hidden; 
     }
     .sidebar-toggle {
@@ -85,24 +81,21 @@
       margin-left: 60px;
       display: flex;
       flex-direction: column;
-      height: 100vh; /* 确保主区域占满视窗高度 */
+      height: 100vh; 
     }
     .topbar {
       background: #f0f0f0; padding: 8px;
       display: flex; align-items: center; gap: 6px;
-      flex-shrink: 0; /* 顶部栏不收缩 */
+      flex-shrink: 0; 
     }
     .topbar h1 {
       margin: 0; 
       flex: 1;
     }
     .chart-container {
-      flex: 1; /* 关键: 占满 .main-area 剩余的全部高度 */
+      flex: 1; 
       position: relative; 
-      overflow: auto; /* 关键: *只* 在这个容器内滚动 (用于min-width/min-height) */
-      /* 【布局修复 3】: 
-       * 这是一个 flexbox 修复，确保 'flex: 1' 在内容溢出时能正确计算高度。
-       */
+      overflow: auto; 
       min-height: 0; 
     }
     #myChart {
@@ -113,7 +106,6 @@
 </head>
 
 <body>
-  <!-- HTML 结构保持不变 -->
   <button class="sidebar-toggle" id="toggleSidebar">≡</button>
 
   <div class="sidebar" id="sidebar">
@@ -146,8 +138,13 @@
   </div>
 
   <script>
+    /* * ===============================================================
+     * * 脚本部分 (已修复所有JS拼写错误)
+     * * ===============================================================
+     */
+
     /***************************************************************
-     * 1) CSV链接 (JavaScript 部分完全不变)
+     * 1) CSV链接
      ***************************************************************/
     const KEYWORD_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTxT7pk3XLnPr87Fpq2Fii90bqh_R2jsCjO6e3dZkMLKmuw75ksYiuSce3DC7uUK5IXBEFmeKT1P7oJ/pub?output=csv";
     const AVG_TEMP_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQsIu0jYheUb5YE9-D0SwtL6FxkTjFwEgWaH56NdOyqYfNkcZLJGM2xp9T2wPLcF5lYFBZ3UCa7eiaj/pub?output=csv";
@@ -209,7 +206,6 @@
           const rawStr = (row[c] || "").trim();
           let val = NaN;
           if (rawStr) {
-            // 移除逗号, parseFloat 会自动处理 "N/A" 为 NaN
             val = parseFloat(rawStr.replace(/,/g, ''));
           }
 
@@ -309,14 +305,15 @@
           scales: {
             x: { title: { display: true, text: "周" } },
             y: {
-              reverse: false, // 搜索量：不反转
+              reverse: false, 
               title: { display: true, text: "关键词搜索量(数值大→上)" }
             },
             y2: {
               type: "linear",
               position: "right",
               reverse: false,
-        S       title: { display: true, text: "气温(℃)" },
+              // 【JS 错误修复 1】: 移除了多余的 'S'
+              title: { display: true, text: "气温(℃)" },
               grid: { drawOnChartArea: false }
             }
           },
@@ -331,7 +328,7 @@
                     if (isNaN(val)) {
                         return context.dataset.label + ": (无数据)";
                     }
-                  let str = context.dataset.label + ": " + val.toLocaleString(); // 添加千位分隔符
+                  let str = context.dataset.label + ": " + val.toLocaleString(); 
                   if (context.dataset.yAxisID === "y2") {
                     str += "°C";
                   }
@@ -360,7 +357,6 @@
      ***************************************************************/
     function getLatestValue(arr) {
       if (arr.length === 0) return NaN;
-      // 从后往前找第一个非 NaN 的值
       for (let i = arr.length - 1; i >= 0; i--) {
         if (!isNaN(arr[i])) {
             return arr[i];
@@ -402,7 +398,6 @@
 
         details.appendChild(summary);
 
-        // 关键词 (降序排序 B - A)
         const kwMap = gData[grp];
         let kwArray = Object.keys(kwMap).map(kw => {
           const arr = kwMap[kw];
@@ -427,7 +422,7 @@
           cb.dataset.keyword = obj.kw;
           let lastStr = "";
           if (!isNaN(obj.latestVal)) {
-            lastStr = " (" + obj.latestVal.toLocaleString() + ")"; // 添加千位分隔符
+            lastStr = " (" + obj.latestVal.toLocaleString() + ")"; 
           }
           lb.appendChild(cb);
           lb.append(" " + obj.kw + lastStr);
@@ -474,7 +469,7 @@
             matchedKw++;
           } else {
             lb.style.display = "none";
-E         }
+          } // 【JS 错误修复 3】: 移除了多余的 'E'
         });
 
         if (s.length === 0) {
@@ -603,7 +598,8 @@ E         }
         borderDash: [6, 3],
         fill: false,
         tension: 0.1,
-g       pointRadius: 0,
+      // 【JS 错误修复 2】: 移除了多余的 'g'
+        pointRadius: 0,
         pointHoverRadius: 6,
         yAxisID: "y2"
       });
@@ -619,7 +615,7 @@ g       pointRadius: 0,
           scales: {
             x: { title: { display: true, text: "周" } },
             y: {
-              reverse: false, // 搜索量：不反转
+              reverse: false, 
               title: { display: true, text: "关键词搜索量(数值大→上)" }
             },
             y2: {
@@ -703,8 +699,8 @@ g       pointRadius: 0,
         // 6) 初始化下拉
         const startSel = document.getElementById("startWeek");
         const endSel = document.getElementById("endWeek");
-        startSel.innerHTML = ""; // 清空
-        endSel.innerHTML = ""; // 清空
+        startSel.innerHTML = ""; 
+        endSel.innerHTML = ""; 
         weeks.forEach((wk, i) => {
           const opt1 = document.createElement("option");
           opt1.value = i;
@@ -714,7 +710,8 @@ g       pointRadius: 0,
           const opt2 = document.createElement("option");
           opt2.value = i;
           opt2.text = wk.replace("_Week_", " W");
-Z       endSel.appendChild(opt2);
+          // 【JS 错误修复 4】: 移除了多余的 'Z'
+          endSel.appendChild(opt2);
         });
         startSel.value = 0;
         endSel.value = weeks.length - 1;
@@ -734,7 +731,6 @@ Z       endSel.appendChild(opt2);
       document.getElementById("sidebar").classList.toggle("active");
     });
     document.getElementById("btnRefresh").addEventListener("click", () => {
-      // 刷新时清空图表，显示加载中...
       if (chart) chart.destroy();
       const ctx = document.getElementById("myChart").getContext("2d");
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -750,7 +746,8 @@ Z       endSel.appendChild(opt2);
     });
     document.getElementById("globalAllBtn").addEventListener("click", () => {
       setAllCheck(true);
-  S });
+    // 【JS 错误修复 5】: 移除了多余的 'S'
+    });
     document.getElementById("globalNoneBtn").addEventListener("click", () => {
       setAllCheck(false);
     });
@@ -770,3 +767,4 @@ Z       endSel.appendChild(opt2);
   </script>
 </body>
 </html>
+
